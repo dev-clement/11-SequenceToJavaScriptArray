@@ -1,0 +1,162 @@
+= Send sequence data to QML
+In this article, we'll see how we can send sequenced data back and forth between C++ and QML
+
+:toc:
+:sectnums:
+
+== Introduction
+In Qt, there is some sequence types such as `QList`, `QVector`, `QMap`, just to name a few, and you can use one of these to model sequences of data in you Qt application, 
+
+NOTE: What do we want to see in this article is what will happened if you exchange these sequences type from the Cpp side to the QML one.
+
+IMPORTANT: When you send a sequence from Cpp to QML, it will then be converted into a JavaScript array, and if you do the other way around, the array will be converted to a QContainer class.
+
+== Example
+So in order to test the sequence handling and its conversion from QML to Cpp and vice-versa, we'll do an example.
+
+NOTE: We will try to first send a sequence from Cpp and display it to QML:
+
+=== Creating the sequence on Cpp side
+In order to make the sequence on the Cpp side, you can do the following:
+
+. Creating a class on the Cpp side named `CppClass` (how original !)
+. Create a container as private named `_vector` (how original 2 !)
+. Create 2 method that can be used by the QML using the `Q_INVOKABLE` macro
+
+Below an example of the class's prototype:
+```cpp
+class CppClass : public QObject
+{
+    Q_OBJECT
+public:
+    explicit CppClass(QObject *parent = nullptr);
+
+    Q_INVOKABLE void qmlArrayToCpp(const QVector<QString> &vec);
+    Q_INVOKABLE QVector<QString> retrieveStrings() const;
+signals:
+
+private:
+    QVector<QString> _vector;
+};
+```
+The content of the method present in the class is as follow:
+```cpp
+CppClass::CppClass(QObject *parent): QObject{parent} {
+    _vector.append("One");
+    _vector.append("Two");
+    _vector.append("Three");
+    _vector.append("Four");
+}
+
+void CppClass::qmlArrayToCpp(const QVector<QString> &vec) {
+    foreach (const QString &elem, vec) {
+        qDebug() << elem;
+    }
+}
+
+QVector<QString> CppClass::retrieveStrings() const {
+    return _vector;
+}
+```
+== Using QML to send array to the class
+Inside of the QML, you need to fetch the `QVector` of you `CppClass`.
+
+NOTE: Something that is important is that the QML doesn't have information related to the QVector type, it will then convert it into a JS array
+
+Before using it into the QML, you need to register the class into the QML engine, you can do it in 2 ways:
+
+. Using th QML_ELEMENT macro to the header of the class, since Qt 6.7
+. Adding the qmlRegisterType 
+
+As we are on Qt 6.5, I'm going to use the following way to import my class to the QML side:
+
+```cpp
+#include "cppclass.hpp"
+...
+
+int main(int argc, char *argv[])
+{
+    ....
+    CppClass test;
+    qmlRegisterType<CppClass>("com.franco.custom", 0, 1, "CppClass");
+    ...
+}
+```
+
+So in the QML side of the application, you can do the following:
+
+```qml
+...
+...
+import com.franco.custom
+
+...
+    CppClass {
+        id: cppClassId
+    }
+
+    Button {
+        id: btn1Id
+        text: "Send to Cpp"
+        onClicked: function() {
+            var arr = ["Apple", "Banana", "Avocado", "Pear", "Orange"]
+            cppClassId.qmlArrayToCpp(arr)
+        }
+    }
+...
+```
+Now you can see that the method `qmlArrayToCpp` take a `QVector` as parameter, nevertheless, the array isn't a vector.
+
+IMPORTANT: QML engine will convert the JavaScript array into a Cpp container.
+
+== Using Cpp to send data to QML
+You can do the other way around, that mean passing Cpp sequence into the QML.
+
+IMPORTANT: The sequence you are sending from the Cpp to QML is going to be converted into a JavaScript array.
+
+Same thing as the previous paragraph, don't forget to register the `CppClass` type to the QML engine, you can do it in 2 ways since Qt6.6:
+
+. Either you are adding the QML_ELEMENT inside of the header file of your class, since Qt 6.6
+. Or you are adding the qmlRegisterType to the main function:
+
+```cpp
+#include "cppclass.hpp"
+...
+
+int main(int argc, char *argv[])
+{
+    ...
+    CppClass test;
+    qmlRegisterType<CppClass>("com.franco.custom", 0, 1, "CppClass");
+    ...
+}
+
+```
+Then in your QML application, you can do the following in order to retrieve the array:
+```qml
+import com.franco.custom
+...
+
+Window {
+    ...
+
+    CppClass {
+        id: cppClassId
+    }
+
+    ...
+    Button {
+        id: btn2Id
+        text: "Read from Cpp"
+        anchors.top: btn1Id.bottom
+        onClicked: function() {
+            var arr = cppClassId.retrieveStrings()
+            print("The length of the array is: " + arr.length)
+
+            arr.forEach(function(elem) {
+                print("element: " + elem)
+            })
+        }
+    }
+}
+```
